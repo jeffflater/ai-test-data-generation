@@ -1,0 +1,127 @@
+{
+  "name": "users",
+  "description": "User account information for the application",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string",
+      "format": "uuid",
+      "required": true,
+      "nullable": false,
+      "description": "Unique user identifier"
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "format": "email",
+      "required": true,
+      "nullable": false,
+      "max_length": 255,
+      "description": "User's email address"
+    },
+    {
+      "name": "username",
+      "type": "string",
+      "required": true,
+      "nullable": false,
+      "min_length": 3,
+      "max_length": 50,
+      "pattern": "^[a-zA-Z0-9_]+$",
+      "description": "Unique username for login"
+    },
+    {
+      "name": "display_name",
+      "type": "string",
+      "max_length": 100,
+      "description": "User's display name"
+    },
+    {
+      "name": "age",
+      "type": "integer",
+      "minimum": 13,
+      "maximum": 150,
+      "description": "User's age in years"
+    },
+    {
+      "name": "balance",
+      "type": "float",
+      "minimum": 0,
+      "description": "Account balance in USD"
+    },
+    {
+      "name": "role",
+      "type": "string",
+      "enum": ["admin", "moderator", "user", "guest"],
+      "default": "user",
+      "description": "User's role in the system"
+    },
+    {
+      "name": "is_active",
+      "type": "boolean",
+      "default": true,
+      "description": "Whether the account is active"
+    },
+    {
+      "name": "is_verified",
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the email is verified"
+    },
+    {
+      "name": "preferences",
+      "type": "object",
+      "description": "User preferences",
+      "properties": {
+        "theme": {
+          "name": "theme",
+          "type": "string",
+          "enum": ["light", "dark", "system"],
+          "default": "system"
+        },
+        "notifications_enabled": {
+          "name": "notifications_enabled",
+          "type": "boolean",
+          "default": true
+        },
+        "language": {
+          "name": "language",
+          "type": "string",
+          "enum": ["en", "es", "fr", "de", "ja"],
+          "default": "en"
+        }
+      }
+    },
+    {
+      "name": "tags",
+      "type": "array",
+      "description": "User tags for categorization",
+      "unique_items": true,
+      "max_items": 10,
+      "items": {
+        "name": "tag",
+        "type": "string",
+        "min_length": 1,
+        "max_length": 30
+      }
+    },
+    {
+      "name": "created_at",
+      "type": "string",
+      "format": "datetime",
+      "required": true,
+      "description": "Account creation timestamp"
+    },
+    {
+      "name": "updated_at",
+      "type": "string",
+      "format": "datetime",
+      "description": "Last update timestamp"
+    },
+    {
+      "name": "last_login_at",
+      "type": "string",
+      "format": "datetime",
+      "description": "Last login timestamp"
+    }
+  ]
+}

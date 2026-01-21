@@ -158,98 +158,208 @@ docker-compose run --rm persona-gen quick normal_user -t api -n 10 -p /app/perso
 
 ---
 
-## Schema Import (NEW)
+## Schema Import
 
-Import external schema files to create reusable profiles. This allows you to generate test data that matches your existing database schemas, API specifications, or Kafka topics.
+Import schemas to create reusable profiles for test data generation. This allows you to generate test data that matches your existing database schemas, API specifications, or Kafka topics.
 
-### Supported Schema Formats
+### Universal Format Support via LLM Conversion
 
-| Format | File Extensions | Use Case |
-|--------|-----------------|----------|
-| **Swagger/OpenAPI** | `.json`, `.yaml` | REST API contracts |
-| **JSON Schema** | `.json` | Data validation schemas |
-| **Avro** | `.avsc` | Kafka topics, data pipelines |
-| **SQL DDL** | `.sql` | Database tables |
-| **Protobuf** | `.proto` | gRPC services, Kafka |
+Instead of maintaining parsers for every schema format, we use a **canonical JSON format** that you can convert to from ANY source using ChatGPT or Claude. This approach:
 
-### Two-Step Workflow
+- Supports unlimited formats (SQL, Avro, Protobuf, OpenAPI, GraphQL, TypeScript, etc.)
+- Requires zero maintenance for evolving external specifications
+- Leverages LLMs which excel at schema translation
 
-**Step 1: Import schema → Create reusable profile (one-time)**
+### Three-Step Workflow
 
-```bash
-# Import from Swagger/OpenAPI
-docker-compose run --rm persona-gen import-schema \
-  /app/schemas/openapi-users.yaml \
-  -e User \
-  -o /app/profiles/user-api.yaml
+**Step 1: Convert your schema to canonical JSON format (one-time)**
 
-# Import from SQL DDL
-docker-compose run --rm persona-gen import-schema \
-  /app/schemas/users.sql \
-  -f ddl \
-  -e users \
-  -o /app/profiles/users-db.yaml
+Copy this universal prompt into ChatGPT/Claude, then paste your schema at the end:
 
-# Import from Avro (for Kafka streaming)
-docker-compose run --rm persona-gen import-schema \
-  /app/schemas/user-event.avsc \
-  -t streaming \
-  -o /app/profiles/user-events.yaml
+<details>
+<summary><strong>Click to expand Universal Conversion Prompt</strong></summary>
 
-# Import from JSON Schema
-docker-compose run --rm persona-gen import-schema \
-  /app/schemas/user.schema.json \
-  -o /app/profiles/user-schema.yaml
+```
+Convert the following schema to the canonical JSON format for test data generation.
 
-# Import from Protobuf
-docker-compose run --rm persona-gen import-schema \
-  /app/schemas/user.proto \
-  -f protobuf \
-  -e User \
-  -o /app/profiles/user-proto.yaml
+**Output Format:**
+{
+  "name": "<entity_name>",
+  "description": "<optional description>",
+  "fields": [
+    {
+      "name": "<field_name>",
+      "type": "<string|integer|float|boolean|array|object>",
+      "format": "<optional: uuid|email|date|datetime|time|url|hostname|ipv4|ipv6|phone>",
+      "required": <true|false>,
+      "nullable": <true|false>,
+      "enum": ["<value1>", "<value2>"],
+      "min_length": <number>,
+      "max_length": <number>,
+      "minimum": <number>,
+      "maximum": <number>,
+      "pattern": "<regex>",
+      "default": <value>,
+      "items": { <nested field schema for arrays> },
+      "properties": { "<name>": <nested field schema for objects> }
+    }
+  ]
+}
+
+**Conversion Rules:**
+1. Identify the entity/table/message name → use as "name"
+2. Map each field/column/property to the fields array
+3. Map types to: string, integer, float, boolean, array, object
+4. Detect formats from type names or field names:
+   - UUID/GUID → format: "uuid"
+   - Fields named *email* → format: "email"
+   - Fields named *phone* → format: "phone"
+   - Fields named *url*/*uri* → format: "url"
+   - DATE → format: "date"
+   - DATETIME/TIMESTAMP → format: "datetime"
+5. NOT NULL or required markers → required: true, nullable: false
+6. PRIMARY KEY → required: true, nullable: false
+7. String length limits → max_length
+8. Numeric ranges or CHECK constraints → minimum/maximum
+9. ENUM types or CHECK IN (...) → enum array
+10. DEFAULT values → default property
+11. Arrays/repeated fields → type: "array" with items schema
+12. Nested objects/records → type: "object" with properties
+
+**Important:**
+- Output ONLY valid JSON, no markdown code blocks, no explanation
+- Include only properties that have values (omit null/empty properties)
+- For nested objects and arrays, recursively apply the same field schema format
+
+**Schema to convert:**
+[PASTE YOUR SCHEMA HERE]
 ```
 
-**Step 2: Generate data using the profile (repeatable)**
+</details>
+
+**Example conversion:**
+
+```
+Input (SQL DDL):
+  CREATE TABLE users (
+    id UUID PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    age INTEGER CHECK (age >= 0 AND age <= 150)
+  );
+
+Output (Canonical JSON):
+  {
+    "name": "users",
+    "fields": [
+      {"name": "id", "type": "string", "format": "uuid", "required": true},
+      {"name": "email", "type": "string", "format": "email", "required": true, "max_length": 255},
+      {"name": "age", "type": "integer", "minimum": 0, "maximum": 150}
+    ]
+  }
+```
+
+Save the JSON output as a `.json` file (e.g., `users.json`).
+
+**Step 2: Import the canonical JSON → Create reusable profile**
+
+```bash
+# Import for API testing
+docker-compose run --rm persona-gen import-schema \
+  /app/schemas/users.json \
+  -o /app/profiles/users.yaml
+
+# Import for streaming with higher count
+docker-compose run --rm persona-gen import-schema \
+  /app/schemas/events.json \
+  -t streaming \
+  -c 1000 \
+  -o /app/profiles/events.yaml
+
+# Import for load testing
+docker-compose run --rm persona-gen import-schema \
+  /app/schemas/orders.json \
+  -t load \
+  -c 10000 \
+  -o /app/profiles/orders-load.yaml
+```
+
+**Step 3: Generate data using the profile (repeatable)**
 
 ```bash
 # Generate with normal user behavior
-docker-compose run --rm persona-gen generate /app/profiles/user-api.yaml \
+docker-compose run --rm persona-gen generate /app/profiles/users.yaml \
   -p /app/personas \
   --persona normal_user
 
 # Generate with edge case behavior
-docker-compose run --rm persona-gen generate /app/profiles/user-api.yaml \
+docker-compose run --rm persona-gen generate /app/profiles/users.yaml \
   -p /app/personas \
   --persona edge_case_user
 
 # Generate fault injection data
-docker-compose run --rm persona-gen generate /app/profiles/user-api.yaml \
+docker-compose run --rm persona-gen generate /app/profiles/users.yaml \
   -p /app/personas \
   --persona noisy_device
 ```
 
-### List Available Entities
+### Canonical JSON Format
 
-Before importing, you can list all entities (schemas, tables, messages) in a file:
+The canonical format supports all common schema features:
 
-```bash
-# List schemas in OpenAPI spec
-docker-compose run --rm persona-gen import-schema \
-  /app/schemas/openapi-users.yaml \
-  --list-entities
-
-# List tables in SQL DDL
-docker-compose run --rm persona-gen import-schema \
-  /app/schemas/users.sql \
-  -f ddl \
-  --list-entities
-
-# List messages in Protobuf
-docker-compose run --rm persona-gen import-schema \
-  /app/schemas/user.proto \
-  -f protobuf \
-  --list-entities
+```json
+{
+  "name": "users",
+  "description": "User accounts",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string",
+      "format": "uuid",
+      "required": true
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "format": "email",
+      "required": true,
+      "max_length": 255
+    },
+    {
+      "name": "age",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 150
+    },
+    {
+      "name": "role",
+      "type": "string",
+      "enum": ["admin", "user", "guest"],
+      "default": "user"
+    },
+    {
+      "name": "tags",
+      "type": "array",
+      "items": {"name": "tag", "type": "string"},
+      "unique_items": true,
+      "max_items": 10
+    },
+    {
+      "name": "preferences",
+      "type": "object",
+      "properties": {
+        "theme": {"name": "theme", "type": "string", "enum": ["light", "dark"]},
+        "notifications": {"name": "notifications", "type": "boolean", "default": true}
+      }
+    }
+  ]
+}
 ```
+
+**Supported types:** `string`, `integer`, `float`, `boolean`, `array`, `object`
+
+**Supported formats:** `uuid`, `email`, `date`, `datetime`, `time`, `url`, `hostname`, `ipv4`, `ipv6`, `phone`
+
+**Full specification:** See `docs/SCHEMA_IMPORT_FORMAT.md`
 
 ### Import Options
 
@@ -257,48 +367,43 @@ docker-compose run --rm persona-gen import-schema \
 persona-gen import-schema <SCHEMA_FILE> [OPTIONS]
 
 Options:
-  -f, --format          Schema format (auto-detected if not specified)
-                        [swagger|openapi|jsonschema|avro|ddl|protobuf]
-  -e, --entity          Entity to extract (schema/table/message name)
-  -n, --name            Profile name (defaults to entity name)
+  -n, --name            Profile name (defaults to schema name)
   -o, --output          Output profile YAML path (required)
   -t, --dataset-type    Default dataset type [api|streaming|file|load|fault]
   -c, --count           Default record count (default: 100)
   --output-format       Output format [json|jsonl|csv]
-  --list-entities       List available entities in the schema file
 ```
+
+### Conversion Prompts
+
+Ready-to-use prompts for converting from common formats are in `docs/SCHEMA_IMPORT_FORMAT.md`:
+
+| Source Format | Prompt Available |
+|---------------|------------------|
+| SQL DDL | Yes |
+| Apache Avro | Yes |
+| Protocol Buffers | Yes |
+| OpenAPI/Swagger | Yes |
+| GraphQL | Yes |
+| TypeScript | Yes |
 
 ### Example: Complete Workflow
 
 ```bash
-# 1. List available schemas in the OpenAPI spec
-docker-compose run --rm persona-gen import-schema \
-  /app/schemas/openapi-users.yaml --list-entities
+# 1. Convert your SQL DDL using ChatGPT with the prompt from docs/SCHEMA_IMPORT_FORMAT.md
+#    Save the output as users.json
 
-# Output:
-# Available Entities
-# ┏━━━━━━━━━━━━━━━━━━━━┓
-# ┃ Name               ┃
-# ┡━━━━━━━━━━━━━━━━━━━━┩
-# │ User               │
-# │ Address            │
-# │ CreateUserRequest  │
-# │ Order              │
-# │ OrderItem          │
-# └────────────────────┘
-
-# 2. Import the User schema
+# 2. Import the canonical schema
 docker-compose run --rm persona-gen import-schema \
-  /app/schemas/openapi-users.yaml \
-  -e User \
-  -o /app/profiles/user-profile.yaml \
+  /app/schemas/users.json \
+  -o /app/profiles/users.yaml \
   -c 500
 
 # 3. Generate test data with different personas
-docker-compose run --rm persona-gen generate /app/profiles/user-profile.yaml \
+docker-compose run --rm persona-gen generate /app/profiles/users.yaml \
   -p /app/personas --persona normal_user -o /app/output
 
-docker-compose run --rm persona-gen generate /app/profiles/user-profile.yaml \
+docker-compose run --rm persona-gen generate /app/profiles/users.yaml \
   -p /app/personas --persona edge_case_user -o /app/output
 ```
 

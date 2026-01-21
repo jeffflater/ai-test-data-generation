@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://persona-platform.dev/schemas/import-schema.json",
+  "title": "Test Data Generator Import Schema",
+  "description": "Canonical JSON format for importing schemas into the test data generator",
+  "type": "object",
+  "required": ["name", "fields"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Entity/table/message name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional human-readable description"
+    },
+    "fields": {
+      "type": "array",
+      "minItems": 1,
+      "description": "List of field definitions",
+      "items": {
+        "$ref": "#/$defs/field"
+      }
+    }
+  },
+  "$defs": {
+    "field": {
+      "type": "object",
+      "required": ["name", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Field name"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["string", "integer", "float", "boolean", "array", "object"],
+          "description": "Base data type"
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "uuid",
+            "email",
+            "date",
+            "datetime",
+            "date-time",
+            "time",
+            "url",
+            "uri",
+            "hostname",
+            "ipv4",
+            "ipv6",
+            "phone"
+          ],
+          "description": "Format hint for data generation"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable field description"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this field is required"
+        },
+        "nullable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this field can be null"
+        },
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "description": "List of allowed values"
+        },
+        "min_length": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum string length"
+        },
+        "max_length": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum string length"
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Regex pattern for validation"
+        },
+        "minimum": {
+          "type": "number",
+          "description": "Minimum numeric value"
+        },
+        "maximum": {
+          "type": "number",
+          "description": "Maximum numeric value"
+        },
+        "exclusive_minimum": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether minimum is exclusive"
+        },
+        "exclusive_maximum": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether maximum is exclusive"
+        },
+        "default": {
+          "description": "Default value for this field"
+        },
+        "example": {
+          "description": "Example value for documentation"
+        },
+        "items": {
+          "$ref": "#/$defs/field",
+          "description": "Schema for array items (when type is 'array')"
+        },
+        "min_items": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum array length"
+        },
+        "max_items": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum array length"
+        },
+        "unique_items": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether array items must be unique"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/field"
+          },
+          "description": "Nested field schemas (when type is 'object')"
+        }
+      }
+    }
+  }
+}

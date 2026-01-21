@@ -12,8 +12,14 @@ from pydantic import BaseModel, Field
 class SchemaFormat(str, Enum):
     """Supported schema formats."""
 
+    # The canonical JSON format is the only supported import format.
+    # Users should convert their schemas to this format using ChatGPT/Claude.
+    # See docs/SCHEMA_IMPORT_FORMAT.md for details.
+    CANONICAL = "canonical"
+
+    # Legacy formats (deprecated - will be removed)
     SWAGGER = "swagger"
-    OPENAPI = "openapi"  # alias for swagger
+    OPENAPI = "openapi"
     JSON_SCHEMA = "jsonschema"
     AVRO = "avro"
     DDL = "ddl"

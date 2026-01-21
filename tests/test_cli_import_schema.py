@@ -1,8 +1,7 @@
 """Tests for import-schema CLI command.
 
 Tests cover:
-- Listing entities from various schema formats
-- Importing schemas to profile YAML
+- Importing canonical JSON schemas to profile YAML
 - CLI option handling
 - Error cases
 """
@@ -20,11 +19,7 @@ from persona_platform.cli.main import cli
 
 # Test data paths
 SCHEMAS_DIR = Path(__file__).parent.parent / "examples" / "schemas"
-OPENAPI_FILE = SCHEMAS_DIR / "openapi-users.yaml"
-JSON_SCHEMA_FILE = SCHEMAS_DIR / "user.schema.json"
-AVRO_FILE = SCHEMAS_DIR / "user-event.avsc"
-DDL_FILE = SCHEMAS_DIR / "users.sql"
-PROTOBUF_FILE = SCHEMAS_DIR / "user.proto"
+CANONICAL_FILE = SCHEMAS_DIR / "users.import.json"
 
 
 @pytest.fixture
@@ -40,78 +35,23 @@ def temp_output_dir():
         yield Path(tmpdir)
 
 
-# =============================================================================
-# List Entities Tests
-# =============================================================================
-
-class TestListEntities:
-    """Tests for --list-entities option."""
-
-    def test_list_swagger_entities(self, runner):
-        """Test listing entities from Swagger/OpenAPI file."""
-        result = runner.invoke(cli, [
-            "import-schema",
-            str(OPENAPI_FILE),
-            "--list-entities"
-        ])
-
-        assert result.exit_code == 0
-        assert "User" in result.output
-        assert "Address" in result.output
-        assert "Order" in result.output
-        assert "swagger" in result.output.lower()
-
-    def test_list_json_schema_entities(self, runner):
-        """Test listing entities from JSON Schema file."""
-        result = runner.invoke(cli, [
-            "import-schema",
-            str(JSON_SCHEMA_FILE),
-            "--list-entities"
-        ])
-
-        assert result.exit_code == 0
-        assert "User" in result.output
-
-    def test_list_avro_entities(self, runner):
-        """Test listing entities from Avro file."""
-        result = runner.invoke(cli, [
-            "import-schema",
-            str(AVRO_FILE),
-            "--list-entities"
-        ])
-
-        assert result.exit_code == 0
-        assert "UserEvent" in result.output
-        assert "avro" in result.output.lower()
-
-    def test_list_ddl_entities(self, runner):
-        """Test listing entities from SQL DDL file."""
-        result = runner.invoke(cli, [
-            "import-schema",
-            str(DDL_FILE),
-            "-f", "ddl",
-            "--list-entities"
-        ])
-
-        assert result.exit_code == 0
-        assert "users" in result.output
-        assert "orders" in result.output
-        assert "ddl" in result.output.lower()
-
-    def test_list_protobuf_entities(self, runner):
-        """Test listing entities from Protobuf file."""
-        result = runner.invoke(cli, [
-            "import-schema",
-            str(PROTOBUF_FILE),
-            "-f", "protobuf",
-            "--list-entities"
-        ])
-
-        assert result.exit_code == 0
-        assert "User" in result.output
-        assert "Order" in result.output
-        assert "UserEvent" in result.output
-        assert "protobuf" in result.output.lower()
+@pytest.fixture
+def sample_schema_file(temp_output_dir):
+    """Create a sample canonical schema file."""
+    schema = {
+        "name": "products",
+        "description": "Product catalog",
+        "fields": [
+            {"name": "id", "type": "string", "format": "uuid", "required": True},
+            {"name": "name", "type": "string", "required": True, "max_length": 100},
+            {"name": "price", "type": "float", "minimum": 0},
+            {"name": "category", "type": "string", "enum": ["electronics", "clothing", "food"]},
+            {"name": "in_stock", "type": "boolean", "default": True},
+        ]
+    }
+    schema_file = temp_output_dir / "products.json"
+    schema_file.write_text(json.dumps(schema, indent=2))
+    return schema_file
 
 
 # =============================================================================
@@ -121,14 +61,13 @@ class TestListEntities:
 class TestImportSchema:
     """Tests for importing schemas to profile."""
 
-    def test_import_swagger_user(self, runner, temp_output_dir):
-        """Test importing User schema from Swagger."""
-        output_file = temp_output_dir / "user-profile.yaml"
+    def test_import_canonical_schema(self, runner, temp_output_dir):
+        """Test importing canonical JSON schema."""
+        output_file = temp_output_dir / "users-profile.yaml"
 
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User",
+            str(CANONICAL_FILE),
             "-o", str(output_file)
         ])
 
@@ -144,33 +83,13 @@ class TestImportSchema:
         assert profile["datasets"][0]["type"] == "api"
         assert "schema" in profile["datasets"][0]["options"]
 
-    def test_import_ddl_users_table(self, runner, temp_output_dir):
-        """Test importing users table from DDL."""
-        output_file = temp_output_dir / "users-db.yaml"
+    def test_import_for_streaming(self, runner, temp_output_dir, sample_schema_file):
+        """Test importing schema for streaming dataset type."""
+        output_file = temp_output_dir / "streaming.yaml"
 
         result = runner.invoke(cli, [
             "import-schema",
-            str(DDL_FILE),
-            "-f", "ddl",
-            "-e", "users",
-            "-o", str(output_file)
-        ])
-
-        assert result.exit_code == 0
-        assert output_file.exists()
-
-        with open(output_file) as f:
-            profile = yaml.safe_load(f)
-
-        assert profile["datasets"][0]["options"]["schema"] is not None
-
-    def test_import_avro_for_streaming(self, runner, temp_output_dir):
-        """Test importing Avro schema for streaming."""
-        output_file = temp_output_dir / "events.yaml"
-
-        result = runner.invoke(cli, [
-            "import-schema",
-            str(AVRO_FILE),
+            str(sample_schema_file),
             "-t", "streaming",
             "-o", str(output_file)
         ])
@@ -182,33 +101,25 @@ class TestImportSchema:
 
         assert profile["datasets"][0]["type"] == "streaming"
 
-    def test_import_protobuf_message(self, runner, temp_output_dir):
-        """Test importing Protobuf message."""
-        output_file = temp_output_dir / "proto-profile.yaml"
+    def test_import_for_load_testing(self, runner, temp_output_dir, sample_schema_file):
+        """Test importing schema for load testing."""
+        output_file = temp_output_dir / "load.yaml"
 
         result = runner.invoke(cli, [
             "import-schema",
-            str(PROTOBUF_FILE),
-            "-f", "protobuf",
-            "-e", "User",
+            str(sample_schema_file),
+            "-t", "load",
+            "-c", "10000",
             "-o", str(output_file)
         ])
 
         assert result.exit_code == 0
-        assert output_file.exists()
 
-    def test_import_json_schema(self, runner, temp_output_dir):
-        """Test importing JSON Schema."""
-        output_file = temp_output_dir / "json-profile.yaml"
+        with open(output_file) as f:
+            profile = yaml.safe_load(f)
 
-        result = runner.invoke(cli, [
-            "import-schema",
-            str(JSON_SCHEMA_FILE),
-            "-o", str(output_file)
-        ])
-
-        assert result.exit_code == 0
-        assert output_file.exists()
+        assert profile["datasets"][0]["type"] == "load"
+        assert profile["datasets"][0]["count"] == 10000
 
 
 # =============================================================================
@@ -218,14 +129,13 @@ class TestImportSchema:
 class TestCLIOptions:
     """Tests for CLI option handling."""
 
-    def test_custom_profile_name(self, runner, temp_output_dir):
+    def test_custom_profile_name(self, runner, temp_output_dir, sample_schema_file):
         """Test using custom profile name."""
         output_file = temp_output_dir / "custom.yaml"
 
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User",
+            str(sample_schema_file),
             "-n", "my_custom_profile",
             "-o", str(output_file)
         ])
@@ -237,14 +147,13 @@ class TestCLIOptions:
 
         assert profile["name"] == "my_custom_profile"
 
-    def test_custom_count(self, runner, temp_output_dir):
+    def test_custom_count(self, runner, temp_output_dir, sample_schema_file):
         """Test using custom record count."""
         output_file = temp_output_dir / "profile.yaml"
 
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User",
+            str(sample_schema_file),
             "-c", "500",
             "-o", str(output_file)
         ])
@@ -256,14 +165,13 @@ class TestCLIOptions:
 
         assert profile["datasets"][0]["count"] == 500
 
-    def test_output_format_jsonl(self, runner, temp_output_dir):
+    def test_output_format_jsonl(self, runner, temp_output_dir, sample_schema_file):
         """Test setting output format to jsonl."""
         output_file = temp_output_dir / "profile.yaml"
 
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User",
+            str(sample_schema_file),
             "--output-format", "jsonl",
             "-o", str(output_file)
         ])
@@ -275,15 +183,14 @@ class TestCLIOptions:
 
         assert profile["output"]["format"] == "jsonl"
 
-    def test_dataset_type_load(self, runner, temp_output_dir):
-        """Test setting dataset type to load."""
+    def test_output_format_csv(self, runner, temp_output_dir, sample_schema_file):
+        """Test setting output format to csv."""
         output_file = temp_output_dir / "profile.yaml"
 
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User",
-            "-t", "load",
+            str(sample_schema_file),
+            "--output-format", "csv",
             "-o", str(output_file)
         ])
 
@@ -292,16 +199,15 @@ class TestCLIOptions:
         with open(output_file) as f:
             profile = yaml.safe_load(f)
 
-        assert profile["datasets"][0]["type"] == "load"
+        assert profile["output"]["format"] == "csv"
 
-    def test_dataset_type_fault(self, runner, temp_output_dir):
+    def test_dataset_type_fault(self, runner, temp_output_dir, sample_schema_file):
         """Test setting dataset type to fault."""
         output_file = temp_output_dir / "profile.yaml"
 
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User",
+            str(sample_schema_file),
             "-t", "fault",
             "-o", str(output_file)
         ])
@@ -313,6 +219,24 @@ class TestCLIOptions:
 
         assert profile["datasets"][0]["type"] == "fault"
 
+    def test_dataset_type_file(self, runner, temp_output_dir, sample_schema_file):
+        """Test setting dataset type to file."""
+        output_file = temp_output_dir / "profile.yaml"
+
+        result = runner.invoke(cli, [
+            "import-schema",
+            str(sample_schema_file),
+            "-t", "file",
+            "-o", str(output_file)
+        ])
+
+        assert result.exit_code == 0
+
+        with open(output_file) as f:
+            profile = yaml.safe_load(f)
+
+        assert profile["datasets"][0]["type"] == "file"
+
 
 # =============================================================================
 # Profile Content Tests
@@ -321,30 +245,28 @@ class TestCLIOptions:
 class TestProfileContent:
     """Tests for generated profile content."""
 
-    def test_profile_has_header_comment(self, runner, temp_output_dir):
+    def test_profile_has_header_comment(self, runner, temp_output_dir, sample_schema_file):
         """Test that profile has header comments."""
         output_file = temp_output_dir / "profile.yaml"
 
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User",
+            str(sample_schema_file),
             "-o", str(output_file)
         ])
 
         content = output_file.read_text()
         assert "# Auto-generated from:" in content
-        assert "# Schema format:" in content
+        assert "# Schema:" in content
         assert "# Usage:" in content
 
-    def test_profile_has_metadata(self, runner, temp_output_dir):
+    def test_profile_has_metadata(self, runner, temp_output_dir, sample_schema_file):
         """Test that profile has metadata section."""
         output_file = temp_output_dir / "profile.yaml"
 
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User",
+            str(sample_schema_file),
             "-o", str(output_file)
         ])
 
@@ -356,14 +278,13 @@ class TestProfileContent:
         assert "source_format" in profile["metadata"]
         assert "field_count" in profile["metadata"]
 
-    def test_profile_schema_has_fields(self, runner, temp_output_dir):
+    def test_profile_schema_has_fields(self, runner, temp_output_dir, sample_schema_file):
         """Test that profile schema contains expected fields."""
         output_file = temp_output_dir / "profile.yaml"
 
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User",
+            str(sample_schema_file),
             "-o", str(output_file)
         ])
 
@@ -372,17 +293,16 @@ class TestProfileContent:
 
         schema = profile["datasets"][0]["options"]["schema"]
         assert "id" in schema
-        assert "username" in schema
-        assert "email" in schema
+        assert "name" in schema
+        assert "price" in schema
 
-    def test_profile_field_has_type(self, runner, temp_output_dir):
+    def test_profile_field_has_type(self, runner, temp_output_dir, sample_schema_file):
         """Test that profile fields have type information."""
         output_file = temp_output_dir / "profile.yaml"
 
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User",
+            str(sample_schema_file),
             "-o", str(output_file)
         ])
 
@@ -391,16 +311,16 @@ class TestProfileContent:
 
         schema = profile["datasets"][0]["options"]["schema"]
         assert schema["id"]["type"] == "string"
-        assert schema["email"]["format"] == "email"
+        assert schema["id"]["format"] == "uuid"
+        assert schema["price"]["type"] == "float"
 
-    def test_profile_tracks_required_fields(self, runner, temp_output_dir):
+    def test_profile_tracks_required_fields(self, runner, temp_output_dir, sample_schema_file):
         """Test that profile tracks required fields."""
         output_file = temp_output_dir / "profile.yaml"
 
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User",
+            str(sample_schema_file),
             "-o", str(output_file)
         ])
 
@@ -409,8 +329,7 @@ class TestProfileContent:
 
         required = profile["metadata"]["required_fields"]
         assert "id" in required
-        assert "username" in required
-        assert "email" in required
+        assert "name" in required
 
 
 # =============================================================================
@@ -420,120 +339,78 @@ class TestProfileContent:
 class TestErrorHandling:
     """Tests for error handling."""
 
-    def test_missing_output_without_list_entities(self, runner):
-        """Test that missing --output raises error when not listing."""
+    def test_missing_output_raises(self, runner):
+        """Test that missing --output raises error."""
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User"
+            str(CANONICAL_FILE)
         ])
 
         assert result.exit_code != 0
-        assert "output" in result.output.lower() or "required" in result.output.lower()
+        assert "missing" in result.output.lower() or "required" in result.output.lower()
 
     def test_nonexistent_file(self, runner, temp_output_dir):
         """Test error for nonexistent input file."""
         result = runner.invoke(cli, [
             "import-schema",
-            "/nonexistent/path/file.yaml",
+            "/nonexistent/path/file.json",
             "-o", str(temp_output_dir / "out.yaml")
         ])
 
         assert result.exit_code != 0
 
-    def test_nonexistent_entity(self, runner, temp_output_dir):
-        """Test error for nonexistent entity."""
+    def test_invalid_json_file(self, runner, temp_output_dir):
+        """Test error for invalid JSON file."""
+        invalid_file = temp_output_dir / "invalid.json"
+        invalid_file.write_text("not valid json {")
+
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "NonexistentEntity",
+            str(invalid_file),
             "-o", str(temp_output_dir / "out.yaml")
         ])
 
         assert result.exit_code != 0
-        assert "not found" in result.output.lower() or "error" in result.output.lower()
+        assert "error" in result.output.lower()
 
-    def test_invalid_format_choice(self, runner, temp_output_dir):
-        """Test error for invalid format choice."""
+    def test_non_canonical_json(self, runner, temp_output_dir):
+        """Test error for JSON that isn't canonical format."""
+        non_canonical = temp_output_dir / "other.json"
+        non_canonical.write_text('{"type": "object", "properties": {}}')
+
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-f", "invalid_format",
+            str(non_canonical),
             "-o", str(temp_output_dir / "out.yaml")
         ])
 
         assert result.exit_code != 0
+        assert "canonical" in result.output.lower()
 
-    def test_invalid_dataset_type_choice(self, runner, temp_output_dir):
+    def test_unsupported_extension(self, runner, temp_output_dir):
+        """Test error for unsupported file extension."""
+        sql_file = temp_output_dir / "schema.sql"
+        sql_file.write_text("CREATE TABLE users (id INT);")
+
+        result = runner.invoke(cli, [
+            "import-schema",
+            str(sql_file),
+            "-o", str(temp_output_dir / "out.yaml")
+        ])
+
+        assert result.exit_code != 0
+        assert "unsupported" in result.output.lower()
+
+    def test_invalid_dataset_type_choice(self, runner, temp_output_dir, sample_schema_file):
         """Test error for invalid dataset type choice."""
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User",
+            str(sample_schema_file),
             "-t", "invalid_type",
             "-o", str(temp_output_dir / "out.yaml")
         ])
 
         assert result.exit_code != 0
-
-
-# =============================================================================
-# Generate Command with --persona Tests
-# =============================================================================
-
-class TestGenerateWithPersona:
-    """Tests for generate command with --persona option."""
-
-    @pytest.fixture
-    def personas_dir(self):
-        """Get personas directory."""
-        return Path(__file__).parent.parent / "examples" / "personas"
-
-    def test_generate_dry_run_with_persona(self, runner, temp_output_dir, personas_dir):
-        """Test generate --dry-run with --persona option."""
-        # First create a profile
-        profile_file = temp_output_dir / "profile.yaml"
-        runner.invoke(cli, [
-            "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User",
-            "-o", str(profile_file)
-        ])
-
-        # Then test generate with --persona
-        result = runner.invoke(cli, [
-            "generate",
-            str(profile_file),
-            "-p", str(personas_dir),
-            "--persona", "normal_user",
-            "--dry-run"
-        ])
-
-        assert result.exit_code == 0
-        assert "normal_user" in result.output
-
-    def test_generate_with_multiple_personas(self, runner, temp_output_dir, personas_dir):
-        """Test generate with multiple --persona options."""
-        profile_file = temp_output_dir / "profile.yaml"
-        runner.invoke(cli, [
-            "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User",
-            "-o", str(profile_file)
-        ])
-
-        result = runner.invoke(cli, [
-            "generate",
-            str(profile_file),
-            "-p", str(personas_dir),
-            "--persona", "normal_user",
-            "--persona", "edge_case_user",
-            "--dry-run"
-        ])
-
-        assert result.exit_code == 0
-        # Both personas should be shown
-        assert "normal_user" in result.output or "edge_case_user" in result.output
 
 
 # =============================================================================
@@ -548,16 +425,39 @@ class TestEndToEndWorkflow:
         """Get personas directory."""
         return Path(__file__).parent.parent / "examples" / "personas"
 
-    def test_swagger_to_api_generation(self, runner, temp_output_dir, personas_dir):
-        """Test complete workflow: Swagger -> Profile -> API data."""
-        profile_file = temp_output_dir / "api-profile.yaml"
+    def test_import_and_generate_dry_run(self, runner, temp_output_dir, personas_dir):
+        """Test complete workflow: import -> generate (dry run)."""
+        profile_file = temp_output_dir / "profile.yaml"
 
         # Import schema
         result = runner.invoke(cli, [
             "import-schema",
-            str(OPENAPI_FILE),
-            "-e", "User",
+            str(CANONICAL_FILE),
             "-c", "10",
+            "-o", str(profile_file)
+        ])
+        assert result.exit_code == 0
+
+        # Generate data (dry run)
+        result = runner.invoke(cli, [
+            "generate",
+            str(profile_file),
+            "-p", str(personas_dir),
+            "--persona", "normal_user",
+            "--dry-run"
+        ])
+        assert result.exit_code == 0
+        assert "normal_user" in result.output
+
+    def test_import_and_generate_data(self, runner, temp_output_dir, personas_dir):
+        """Test complete workflow: import -> generate."""
+        profile_file = temp_output_dir / "profile.yaml"
+
+        # Import schema
+        result = runner.invoke(cli, [
+            "import-schema",
+            str(CANONICAL_FILE),
+            "-c", "5",
             "-o", str(profile_file)
         ])
         assert result.exit_code == 0
@@ -577,23 +477,21 @@ class TestEndToEndWorkflow:
         output_files = list(temp_output_dir.glob("*.json"))
         assert len(output_files) > 0
 
-    def test_ddl_to_streaming_generation(self, runner, temp_output_dir, personas_dir):
-        """Test workflow: DDL -> Profile -> Streaming data."""
+    def test_streaming_workflow(self, runner, temp_output_dir, personas_dir, sample_schema_file):
+        """Test workflow for streaming data generation."""
         profile_file = temp_output_dir / "streaming-profile.yaml"
 
-        # Import schema
+        # Import schema for streaming
         result = runner.invoke(cli, [
             "import-schema",
-            str(DDL_FILE),
-            "-f", "ddl",
-            "-e", "users",
+            str(sample_schema_file),
             "-t", "streaming",
-            "-c", "20",
+            "-c", "10",
             "-o", str(profile_file)
         ])
         assert result.exit_code == 0
 
-        # Generate data
+        # Generate streaming data
         result = runner.invoke(cli, [
             "generate",
             str(profile_file),
@@ -603,76 +501,25 @@ class TestEndToEndWorkflow:
         ])
         assert result.exit_code == 0
 
-    def test_avro_to_file_generation(self, runner, temp_output_dir, personas_dir):
-        """Test workflow: Avro -> Profile -> File data."""
-        profile_file = temp_output_dir / "file-profile.yaml"
 
-        # Import schema
+# =============================================================================
+# Verbose Output Tests
+# =============================================================================
+
+class TestVerboseOutput:
+    """Tests for verbose output mode."""
+
+    def test_verbose_shows_fields(self, runner, temp_output_dir, sample_schema_file):
+        """Test that verbose mode shows field details."""
+        output_file = temp_output_dir / "profile.yaml"
+
         result = runner.invoke(cli, [
+            "-v",
             "import-schema",
-            str(AVRO_FILE),
-            "-t", "file",
-            "-c", "15",
-            "-o", str(profile_file)
+            str(sample_schema_file),
+            "-o", str(output_file)
         ])
+
         assert result.exit_code == 0
-
-        # Generate data
-        result = runner.invoke(cli, [
-            "generate",
-            str(profile_file),
-            "-p", str(personas_dir),
-            "--persona", "legacy_client",
-            "-o", str(temp_output_dir)
-        ])
-        assert result.exit_code == 0
-
-    def test_protobuf_to_load_generation(self, runner, temp_output_dir, personas_dir):
-        """Test workflow: Protobuf -> Profile -> Load test data."""
-        profile_file = temp_output_dir / "load-profile.yaml"
-
-        # Import schema
-        result = runner.invoke(cli, [
-            "import-schema",
-            str(PROTOBUF_FILE),
-            "-f", "protobuf",
-            "-e", "User",
-            "-t", "load",
-            "-c", "100",
-            "-o", str(profile_file)
-        ])
-        assert result.exit_code == 0
-
-        # Generate data
-        result = runner.invoke(cli, [
-            "generate",
-            str(profile_file),
-            "-p", str(personas_dir),
-            "--persona", "high_volume_system",
-            "-o", str(temp_output_dir)
-        ])
-        assert result.exit_code == 0
-
-    def test_schema_to_fault_generation(self, runner, temp_output_dir, personas_dir):
-        """Test workflow: Schema -> Profile -> Fault injection data."""
-        profile_file = temp_output_dir / "fault-profile.yaml"
-
-        # Import schema
-        result = runner.invoke(cli, [
-            "import-schema",
-            str(JSON_SCHEMA_FILE),
-            "-t", "fault",
-            "-c", "10",
-            "-o", str(profile_file)
-        ])
-        assert result.exit_code == 0
-
-        # Generate fault data
-        result = runner.invoke(cli, [
-            "generate",
-            str(profile_file),
-            "-p", str(personas_dir),
-            "--persona", "edge_case_user",
-            "-o", str(temp_output_dir)
-        ])
-        assert result.exit_code == 0
+        # Verbose output should show field names
+        assert "id:" in result.output or "Fields:" in result.output

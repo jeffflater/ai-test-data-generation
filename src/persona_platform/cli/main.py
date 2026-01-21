@@ -346,14 +346,8 @@ def init_persona(ctx: click.Context, name: str, output: str) -> None:
 
 @cli.command()
 @click.argument("schema_file", type=click.Path(exists=True))
-@click.option(
-    "--format", "-f",
-    type=click.Choice(["swagger", "openapi", "jsonschema", "avro", "ddl", "protobuf"]),
-    help="Schema format (auto-detected if not specified)"
-)
-@click.option("--entity", "-e", help="Entity to extract (schema, table, message name)")
-@click.option("--name", "-n", help="Profile name (defaults to entity name)")
-@click.option("--output", "-o", type=click.Path(), help="Output profile YAML path (required unless --list-entities)")
+@click.option("--name", "-n", help="Profile name (defaults to schema name)")
+@click.option("--output", "-o", type=click.Path(), required=True, help="Output profile YAML path")
 @click.option(
     "--dataset-type", "-t",
     type=click.Choice(["api", "streaming", "file", "load", "fault"]),
@@ -362,82 +356,56 @@ def init_persona(ctx: click.Context, name: str, output: str) -> None:
 )
 @click.option("--count", "-c", type=int, default=100, help="Default record count")
 @click.option("--output-format", type=click.Choice(["json", "jsonl", "csv"]), default="json", help="Output format")
-@click.option("--list-entities", is_flag=True, help="List available entities in the schema file")
 @click.pass_context
 def import_schema(
     ctx: click.Context,
     schema_file: str,
-    format: str | None,
-    entity: str | None,
     name: str | None,
     output: str,
     dataset_type: str,
     count: int,
     output_format: str,
-    list_entities: bool,
 ) -> None:
-    """Import an external schema file and create a reusable profile.
+    """Import a canonical JSON schema and create a reusable profile.
 
-    SCHEMA_FILE is the path to the schema file (Swagger, JSON Schema, Avro, DDL, or Protobuf).
+    SCHEMA_FILE is the path to a canonical JSON schema file.
 
     \b
-    Supported formats:
-      - swagger/openapi: OpenAPI/Swagger specification (.json, .yaml)
-      - jsonschema: JSON Schema (.json)
-      - avro: Apache Avro schema (.avsc, .json)
-      - ddl: SQL DDL CREATE TABLE statements (.sql)
-      - protobuf: Protocol Buffers (.proto)
+    The canonical format is the only supported import format. To convert from
+    other formats (SQL, Avro, Protobuf, OpenAPI, etc.), use ChatGPT/Claude
+    with the conversion prompts in docs/SCHEMA_IMPORT_FORMAT.md
+
+    \b
+    Canonical format example:
+      {
+        "name": "users",
+        "fields": [
+          {"name": "id", "type": "string", "format": "uuid", "required": true},
+          {"name": "email", "type": "string", "format": "email"},
+          {"name": "age", "type": "integer", "minimum": 0, "maximum": 150}
+        ]
+      }
 
     \b
     Examples:
-      # Import from Swagger spec
-      persona-gen import-schema api-spec.json -e User -o user-profile.yaml
+      # Import a canonical JSON schema
+      persona-gen import-schema users.import.json -o profiles/users.yaml
 
-      # Import from SQL DDL
-      persona-gen import-schema schema.sql -f ddl -e users -o users-profile.yaml
+      # Import for streaming use case
+      persona-gen import-schema events.json -t streaming -o profiles/events.yaml
 
-      # Import from Avro for streaming
-      persona-gen import-schema event.avsc -t streaming -o events-profile.yaml
-
-      # List available entities in a file
-      persona-gen import-schema api-spec.json --list-entities
+      # Import with custom count
+      persona-gen import-schema products.json -c 1000 -o profiles/products.yaml
     """
     import yaml
-    from persona_platform.schemas import SchemaParser, SchemaFormat
+    from persona_platform.schemas import SchemaParser
 
     verbose = ctx.obj.get("verbose", False)
 
     try:
-        # Parse format if provided
-        schema_format = None
-        if format:
-            schema_format = SchemaFormat(format.lower())
-
-        # Create parser
-        parser = SchemaParser.from_file(schema_file, schema_format)
-
-        # List entities mode
-        if list_entities:
-            entities = parser.list_entities()
-            console.print(f"\n[cyan]Schema format:[/cyan] {parser.format.value}")
-            console.print(f"[cyan]File:[/cyan] {schema_file}\n")
-
-            if entities:
-                table = Table(title="Available Entities")
-                table.add_column("Name", style="cyan")
-                for e in entities:
-                    table.add_row(e)
-                console.print(table)
-            else:
-                console.print("[yellow]No entities found in schema file[/yellow]")
-            return
-
-        # Require output when not listing entities
-        if not output:
-            raise click.UsageError("--output / -o is required when importing a schema")
-
-        # Parse the schema
-        schema_def = parser.parse(entity)
+        # Create parser and parse the schema
+        parser = SchemaParser.from_file(schema_file)
+        schema_def = parser.parse()
 
         # Generate profile dict
         profile_name = name or f"{schema_def.name.lower().replace(' ', '_')}_profile"
@@ -455,8 +423,7 @@ def import_schema(
         with open(output_path, "w") as f:
             # Add header comment
             f.write(f"# Auto-generated from: {schema_file}\n")
-            f.write(f"# Schema format: {parser.format.value}\n")
-            f.write(f"# Entity: {schema_def.source_entity or schema_def.name}\n")
+            f.write(f"# Schema: {schema_def.name}\n")
             f.write(f"# Generated by: persona-gen import-schema\n")
             f.write("#\n")
             f.write("# Usage:\n")
@@ -467,9 +434,9 @@ def import_schema(
         console.print(Panel.fit(
             f"[green]Successfully imported schema![/green]\n\n"
             f"[cyan]Source:[/cyan] {schema_file}\n"
-            f"[cyan]Format:[/cyan] {parser.format.value}\n"
-            f"[cyan]Entity:[/cyan] {schema_def.source_entity or schema_def.name}\n"
+            f"[cyan]Schema:[/cyan] {schema_def.name}\n"
             f"[cyan]Fields:[/cyan] {len(schema_def.fields)}\n"
+            f"[cyan]Required:[/cyan] {len(schema_def.get_required_fields())}\n"
             f"[cyan]Profile:[/cyan] {output}",
             title="Schema Import Complete",
         ))
@@ -478,7 +445,8 @@ def import_schema(
             console.print("\n[cyan]Fields:[/cyan]")
             for field in schema_def.fields:
                 req = "[red]*[/red]" if field.required else ""
-                console.print(f"  - {field.name}: {field.type}{req}")
+                fmt = f" ({field.format})" if field.format else ""
+                console.print(f"  - {field.name}: {field.type}{fmt}{req}")
 
         console.print(f"\n[dim]To generate data, run:[/dim]")
         console.print(f"  [cyan]persona-gen generate {output} -p /path/to/personas --persona normal_user[/cyan]")
