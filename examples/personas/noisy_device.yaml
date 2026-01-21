@@ -1,0 +1,50 @@
+name: noisy_device
+version: "1.0.0"
+description: A device that experiences frequent signal issues, intermittent connectivity, and data quality problems
+tags:
+  - device
+  - iot
+  - edge-case
+
+behaviors:
+  - name: intermittent_connectivity
+    type: timing
+    description: Device goes offline randomly
+    parameters:
+      pattern: intermittent
+      offline_probability: 0.1
+      offline_duration_ms: 5000
+    weight: 0.15
+
+  - name: signal_noise
+    type: data_quality
+    description: Sensor readings have noise
+    parameters:
+      type: noise
+      noise_factor: 0.2
+      spike_probability: 0.05
+    weight: 0.3
+
+  - name: delayed_transmission
+    type: latency
+    description: Network delays in data transmission
+    parameters:
+      delay_ms: 2000
+      variance_ms: 1000
+    weight: 0.25
+
+  - name: occasional_errors
+    type: error_rate
+    description: Occasional transmission errors
+    parameters:
+      error_codes: [408, 502, 503]
+      error_probability: 0.05
+    weight: 0.1
+
+  - name: battery_drain
+    type: pattern
+    description: Behavior changes as battery drains
+    parameters:
+      type: degradation
+      stages: ["full", "medium", "low", "critical"]
+    weight: 0.2

@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  persona-gen:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: persona-platform:latest
+    container_name: persona-gen
+    volumes:
+      # Mount custom personas
+      - ./examples/personas:/app/personas:ro
+      # Mount custom profiles
+      - ./examples/profiles:/app/profiles:ro
+      # Mount schema files for import
+      - ./examples/schemas:/app/schemas:ro
+      # Mount output directory for generated data
+      - ./output:/app/output
+    # Override command for different operations
+    # Examples:
+    #   docker-compose run persona-gen list-generators
+    #   docker-compose run persona-gen generate /app/profiles/api_testing.yaml -p /app/personas -o /app/output
+    #   docker-compose run persona-gen quick normal_user -t api -n 100 -p /app/personas

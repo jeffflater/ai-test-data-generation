@@ -1,0 +1,50 @@
+name: legacy_client
+version: "1.0.0"
+description: An older client system with outdated protocols, slower processing, and compatibility issues
+tags:
+  - client
+  - legacy
+  - compatibility
+
+behaviors:
+  - name: slow_processing
+    type: latency
+    description: Slower request/response cycles
+    parameters:
+      delay_ms: 3000
+      variance_ms: 1500
+    weight: 0.4
+
+  - name: deprecated_formats
+    type: data_quality
+    description: Uses older data formats
+    parameters:
+      type: format_version
+      version: "1.0"
+      missing_new_fields: true
+    weight: 0.5
+
+  - name: connection_reuse
+    type: timing
+    description: Doesn't properly close connections
+    parameters:
+      pattern: connection_leak
+      stale_connection_probability: 0.1
+    weight: 0.2
+
+  - name: retry_storms
+    type: pattern
+    description: Aggressive retry behavior on failures
+    parameters:
+      type: retry
+      max_retries: 10
+      retry_delay_ms: 100
+    weight: 0.15
+
+  - name: partial_feature_support
+    type: constraint
+    description: Only supports subset of API features
+    parameters:
+      type: feature_limitation
+      unsupported_features: ["pagination", "filtering", "bulk_operations"]
+    weight: 0.3

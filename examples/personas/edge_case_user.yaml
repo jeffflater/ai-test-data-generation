@@ -1,0 +1,61 @@
+name: edge_case_user
+version: "1.0.0"
+description: A user who frequently tests boundary conditions and unusual input patterns
+tags:
+  - user
+  - edge-case
+  - testing
+
+behaviors:
+  - name: boundary_values
+    type: data_quality
+    description: Submits values at system limits
+    parameters:
+      type: boundary
+      test_max_lengths: true
+      test_min_values: true
+      test_special_chars: true
+    weight: 0.4
+
+  - name: unicode_inputs
+    type: data_quality
+    description: Uses various unicode characters
+    parameters:
+      type: unicode
+      include_emoji: true
+      include_rtl: true
+      include_zero_width: true
+    weight: 0.3
+
+  - name: rapid_actions
+    type: timing
+    description: Very fast sequential actions
+    parameters:
+      pattern: rapid
+      actions_per_second: 50
+    weight: 0.2
+
+  - name: concurrent_requests
+    type: pattern
+    description: Multiple simultaneous requests
+    parameters:
+      type: concurrent
+      concurrent_count: 10
+    weight: 0.25
+
+  - name: malformed_inputs
+    type: mutation
+    description: Occasionally sends malformed data
+    parameters:
+      mutation_types: [truncated, extra_fields, wrong_types]
+      rate: 0.15
+    weight: 0.2
+
+  - name: session_anomalies
+    type: pattern
+    description: Unusual session behavior
+    parameters:
+      type: session_anomaly
+      multiple_sessions: true
+      session_hijack_simulation: true
+    weight: 0.1

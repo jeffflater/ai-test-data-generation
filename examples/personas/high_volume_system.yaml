@@ -1,0 +1,50 @@
+name: high_volume_system
+version: "1.0.0"
+description: A high-throughput system generating massive amounts of data with burst patterns
+tags:
+  - system
+  - high-volume
+  - load-testing
+
+behaviors:
+  - name: burst_traffic
+    type: volume
+    description: Sudden spikes in traffic
+    parameters:
+      burst_multiplier: 10
+      burst_duration_seconds: 30
+      burst_probability: 0.2
+    weight: 0.3
+
+  - name: sustained_high_load
+    type: volume
+    description: Consistently high request rate
+    parameters:
+      requests_per_second: 1000
+      sustained: true
+    weight: 0.7
+
+  - name: minimal_latency
+    type: latency
+    description: Optimized for speed
+    parameters:
+      delay_ms: 10
+      variance_ms: 5
+    weight: 0.9
+
+  - name: batch_operations
+    type: pattern
+    description: Frequently uses batch APIs
+    parameters:
+      type: batch
+      batch_size: 100
+      batch_frequency: high
+    weight: 0.5
+
+  - name: rate_limit_handling
+    type: error_rate
+    description: Occasionally hits rate limits
+    parameters:
+      error_codes: [429]
+      error_probability: 0.02
+    weight: 0.15

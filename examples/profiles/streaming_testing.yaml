@@ -1,0 +1,60 @@
+name: streaming_testing
+version: "1.0.0"
+description: Profile for generating streaming event datasets for Kafka/Flink testing
+
+personas:
+  - noisy_device
+  - high_volume_system
+
+datasets:
+  - type: streaming
+    count: 10000
+    enabled: true
+    options:
+      topic: sensor-events
+      partition_count: 6
+      event_type: sensor_reading
+      time_window_ms: 300000
+      include_key: true
+
+  - type: streaming
+    count: 5000
+    enabled: true
+    options:
+      topic: user-actions
+      partition_count: 3
+      event_type: user_action
+      time_window_ms: 60000
+
+  - type: streaming
+    count: 2000
+    enabled: true
+    options:
+      topic: transactions
+      partition_count: 12
+      event_type: transaction
+      time_window_ms: 3600000
+
+seed: 12345
+
+output:
+  format: jsonl
+  directory: ./output/streaming_tests
+  filename_pattern: "{persona}_{dataset_type}_{timestamp}"
+  compress: true
+  pretty_print: false
+  include_metadata: true
+
+variables:
+  kafka_cluster: test-cluster
+  environment: staging
+
+tags:
+  - streaming
+  - kafka
+  - flink
+  - event-driven
+
+metadata:
+  owner: data-platform-team
+  project: event-processing

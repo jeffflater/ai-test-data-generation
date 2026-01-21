@@ -1,0 +1,67 @@
+name: api_testing
+version: "1.0.0"
+description: Profile for generating API test datasets across multiple personas
+
+personas:
+  - normal_user
+  - legacy_client
+  - edge_case_user
+
+datasets:
+  - type: api
+    count: 500
+    enabled: true
+    options:
+      method: POST
+      endpoint: /api/v1/users
+      include_response: true
+      schema:
+        id: uuid
+        name: name
+        email: email
+        age: integer
+        created_at: datetime
+
+  - type: api
+    count: 200
+    enabled: true
+    options:
+      method: GET
+      endpoint: /api/v1/users/{id}
+      include_response: true
+
+  - type: fault
+    count: 100
+    enabled: true
+    options:
+      fault_types:
+        - null_value
+        - invalid_type
+        - missing_field
+        - sql_injection
+        - xss_payload
+      fault_probability: 0.5
+      include_valid_baseline: true
+
+seed: 42
+
+output:
+  format: json
+  directory: ./output/api_tests
+  filename_pattern: "{persona}_{dataset_type}_{timestamp}"
+  compress: false
+  pretty_print: true
+  include_metadata: true
+
+variables:
+  environment: testing
+  api_version: v1
+
+tags:
+  - api
+  - integration
+  - contract-testing
+
+metadata:
+  owner: qa-team
+  project: user-service

@@ -1,0 +1,41 @@
+name: normal_user
+version: "1.0.0"
+description: A typical user with standard behavior patterns and occasional minor issues
+tags:
+  - user
+  - standard
+  - baseline
+
+behaviors:
+  - name: standard_timing
+    type: timing
+    description: Normal request patterns
+    parameters:
+      pattern: normal
+      requests_per_minute: 10
+    weight: 0.9
+
+  - name: occasional_typos
+    type: data_quality
+    description: Minor data entry mistakes
+    parameters:
+      type: typo
+      typo_rate: 0.02
+    weight: 0.1
+
+  - name: session_behavior
+    type: pattern
+    description: Standard session lifecycle
+    parameters:
+      type: session
+      avg_session_duration_minutes: 15
+      pages_per_session: 5
+    weight: 0.8
+
+  - name: rare_errors
+    type: error_rate
+    description: Very occasional user errors
+    parameters:
+      error_types: [validation_error, not_found]
+      error_probability: 0.01
+    weight: 0.05

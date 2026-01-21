@@ -1,0 +1,62 @@
+name: load_testing
+version: "1.0.0"
+description: Profile for generating load test scenarios with various traffic patterns
+
+personas:
+  - high_volume_system
+  - normal_user
+
+datasets:
+  - type: load
+    count: 50000
+    enabled: true
+    options:
+      load_profile: ramp
+      request_type: http
+      target_endpoint: /api/v1/orders
+      concurrent_users: 100
+      think_time_ms: 500
+
+  - type: load
+    count: 100000
+    enabled: true
+    options:
+      load_profile: spike
+      request_type: http
+      target_endpoint: /api/v1/products
+      concurrent_users: 500
+      think_time_ms: 200
+
+  - type: load
+    count: 200000
+    enabled: true
+    options:
+      load_profile: soak
+      request_type: database
+      target_endpoint: orders_table
+      concurrent_users: 50
+      think_time_ms: 1000
+
+seed: 99999
+
+output:
+  format: jsonl
+  directory: ./output/load_tests
+  filename_pattern: "{persona}_{dataset_type}_{timestamp}"
+  compress: true
+  pretty_print: false
+  include_metadata: true
+
+variables:
+  target_rps: 10000
+  test_duration_hours: 4
+
+tags:
+  - load
+  - performance
+  - stress
+  - soak
+
+metadata:
+  owner: performance-team
+  project: capacity-planning
